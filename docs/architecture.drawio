@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net">
   <diagram name="Page-1" id="MzdnWf9kKMtf6MzFg2r2">
-    <mxGraphModel dx="2724" dy="1353" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+    <mxGraphModel dx="1650" dy="494" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -233,7 +233,7 @@
             <mxPoint x="-14" as="offset" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="t2d-LZGUo3ZwN1WHmr4H-113" parent="1" style="text;whiteSpace=wrap;html=1;strokeWidth=3;fontSize=13;" value="&lt;font style=&quot;font-size: 15px;&quot;&gt;Solid line   = Solid line&amp;nbsp; = User request path (numbered); responses return the same way&lt;br&gt;Dashed line  = Outbound traffic, management and replication&lt;/font&gt;" vertex="1">
+        <mxCell id="t2d-LZGUo3ZwN1WHmr4H-113" parent="1" style="text;whiteSpace=wrap;html=1;strokeWidth=3;fontSize=13;" value="&lt;font style=&quot;font-size: 15px;&quot;&gt;Solid line   = User request path (numbered); responses return the same way&lt;br&gt;Dashed line  = Outbound traffic, management and replication&lt;/font&gt;" vertex="1">
           <mxGeometry height="50" width="630" x="710" y="10" as="geometry" />
         </mxCell>
       </root>
