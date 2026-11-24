@@ -2,7 +2,7 @@
 
 A highly available and secure web application on AWS that scales automatically with traffic.
 
-> Graduation project for Manara’s “AWS 2: Becoming a Solutions Architect” course. This repository documents the architecture; an Infrastructure as Code implementation is planned (see [Limitations and future work](#limitations-and-future-work)).
+> Graduation project for Manara’s “AWS 2: Becoming a Solutions Architect” course. This repository documents the architecture;
 
 ## Table of contents
 
@@ -19,7 +19,6 @@ A highly available and secure web application on AWS that scales automatically w
 - [Deployment overview](#deployment-overview)
 - [Limitations and future work](#limitations-and-future-work)
 - [Repository structure](#repository-structure)
-- [Author](#author)
 
 ## Solution overview
 
@@ -39,8 +38,7 @@ The example workload is a simple Notes application (Node.js and PostgreSQL) in t
 
 The numbers below match the numbered arrows in the architecture diagram.
 
-1. DNS lookup: the browser asks Route 53 for the address of `notes.example.com`. Route 53 returns the address of the      
-nearest CloudFront edge location. It only answers the DNS query; the request itself does not pass through it.
+1. DNS lookup: the browser asks Route 53 for the address of `notes.example.com`. Route 53 returns the address of the nearest CloudFront edge location. It only answers the DNS query; the request itself does not pass through it.
 2. HTTPS to CloudFront: the browser sends the request to the edge location.
    - Requests for `/static/*` (CSS and JavaScript) are answered from the CloudFront cache. If the file is not in the cache yet, CloudFront gets it from the ALB once and keeps a copy.
    - All other requests (`/` and `/api/*`) are not cached and go to step 3.
