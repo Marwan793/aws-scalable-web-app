@@ -1,0 +1,16 @@
+# systemd unit for the app on each EC2 instance.
+# Restarts the process if it crashes; the ALB health check catches it if it stays down.
+[Unit]
+Description=Notes web application
+After=network-online.target
+
+[Service]
+User=notes
+WorkingDirectory=/opt/notes-app
+EnvironmentFile=/etc/notes-app.env
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
