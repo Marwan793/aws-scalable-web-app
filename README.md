@@ -2,7 +2,7 @@
 
 A highly available and secure web application on AWS that scales automatically with traffic.
 
-> Graduation project for Manara’s “AWS 2: Becoming a Solutions Architect” course. This repository documents the architecture;
+> Graduation project for Manara’s “AWS 2: Becoming a Solutions Architect” course. This repository documents the architecture.
 
 ## Table of contents
 
@@ -22,11 +22,11 @@ A highly available and secure web application on AWS that scales automatically w
 
 ## Solution overview
 
-A web application must stay available when a server or a whole Availability Zone fails, stay fast when traffic grows, and keep its servers and data away from direct internet access. Running the application on a single server meets none of these needs: one failure stops the service, extra traffic slows it down, and the server is exposed directly to the internet.
+A web application must stay available when a server or a whole Availability Zone fails, stay fast when traffic grows, and keep its servers and data away from direct internet access. Running the application on a single server meets none of these needs: one failure stops the service, extra traffic slows it down.
 
 This solution runs the application on Amazon EC2 instances in private subnets across two Availability Zones in eu-central-1 (Frankfurt). An Auto Scaling group adds or removes instances as load changes and replaces unhealthy ones. User traffic reaches the instances only through Amazon CloudFront, which caches static files at edge locations, and an Application Load Balancer protected by AWS WAF. Data is stored in Amazon RDS for PostgreSQL with a Multi-AZ standby, so the database fails over automatically if the primary fails. Administrators reach the instances through AWS Systems Manager Session Manager, without SSH keys, open inbound ports or a bastion host.
 
-The example workload is a simple Notes application (Node.js and PostgreSQL) in the [app/](app/) folder: a single page, static files under `/static/*`, and a small REST API under `/api/notes`. The application is stateless, so any instance can serve any request. This repository documents the architecture; an Infrastructure as Code implementation is planned (see [Limitations and future work](#limitations-and-future-work)).
+The example workload is a simple Notes application (Node.js and PostgreSQL) in the [app/](app/) folder: a single page, static files under `/static/*`, and a small REST API under `/api/notes`. The application is stateless, so any instance can serve any request. 
 
 ## Architecture diagram
 
@@ -38,19 +38,16 @@ The example workload is a simple Notes application (Node.js and PostgreSQL) in t
 
 The numbers below match the numbered arrows in the architecture diagram.
 
-1. DNS lookup: the browser asks Route 53 for the address of `notes.example.com`. Route 53 returns the address of the nearest CloudFront edge location. It only answers the DNS query; the request itself does not pass through it.
-2. HTTPS to CloudFront: the browser sends the request to the edge location.
+1. **DNS lookup:** the browser asks Route 53 for the address of `notes.example.com`. Route 53 returns the address of the nearest CloudFront edge location. It only answers the DNS query; the request itself does not pass through it.
+2. **HTTPS to CloudFront:** the browser sends the request to the edge location.
    - Requests for `/static/*` (CSS and JavaScript) are answered from the CloudFront cache. If the file is not in the cache yet, CloudFront gets it from the ALB once and keeps a copy.
    - All other requests (`/` and `/api/*`) are not cached and go to step 3.
-3. CloudFront to the ALB: CloudFront forwards the request to the ALB through the Internet Gateway, with a secret custom header. Before the request is routed, it passes three checks:
+3. **CloudFront to the ALB:** CloudFront forwards the request to the ALB through the Internet Gateway, with a secret custom header. Before the request is routed, it passes three checks:
    - The ALB security group accepts traffic only from CloudFront.
    - AWS WAF blocks common attacks such as SQL injection and cross-site scripting.
    - An ALB listener rule rejects requests without the custom header.
-4. ALB to EC2: the ALB sends the request to a healthy instance in either Availability Zone.
-5. EC2 to RDS: for `/api/notes`, the application reads from or writes to the RDS primary database. For `/` and `/static/*`, it returns the file directly, without the database.
-6. Response: the response goes back the same way to the browser.
-
-Traffic that the instances start themselves, such as software updates and Session Manager, goes out through the NAT Gateway. It is not part of the user request path.
+4. **ALB to EC2:** the ALB sends the request to a healthy instance in either Availability Zone.
+5. **EC2 to RDS:** for `/api/notes`, the application reads from or writes to the RDS primary
 
 ## AWS services and why each was chosen
 
