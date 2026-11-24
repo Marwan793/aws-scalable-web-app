@@ -57,7 +57,6 @@ Traffic that the instances start themselves, such as software updates and Sessio
 | Service | Role in this solution | Why this service |
 
 | --- | --- | --- |
-
 | Amazon VPC | Private network for all resources | Keeps servers and the database off the internet |
 | Security groups + Network ACLs | Firewalls for instances and subnets | Security groups allow only the needed traffic between tiers; NACLs add a second layer at the subnet level |
 | Amazon EC2 + Auto Scaling | Runs the application | Adds instances when traffic grows and replaces failed ones |
