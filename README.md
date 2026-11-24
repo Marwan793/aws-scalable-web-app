@@ -87,37 +87,103 @@ The numbers below match the numbered arrows in the architecture diagram.
 | app-rt-b | app-b | 0.0.0.0/0 | NAT Gateway (AZ b) |
 | data-rt | data-a, data-b | Local only | — |
 
-<!-- Explain why the data subnets have no internet route. -->
+- **Public subnets** route `0.0.0.0/0` to the Internet Gateway. Only the ALB nodes and the NAT Gateways live here, because they are the only resources that must be reachable from, or reach, the internet directly.
+- **App subnets** route `0.0.0.0/0` to the NAT Gateway in the same Availability Zone. The instances can start outbound connections (software updates, Session Manager), but nothing on the internet can start a connection to them. Each AZ has its own NAT Gateway and route table, so if one AZ fails, the instances in the other AZ keep their outbound access.
+- **Data subnets** have no internet route, only the local VPC route. The database needs to talk only to the application instances in the same VPC, and RDS is a managed service, so AWS applies patches, takes backups and handles failover without the database needing internet access. Without an internet route, even if the database were compromised, data could not be sent out of the VPC directly.
 
 ## Security
 
 ### Layers of defense
 
-<!-- From the edge inward: CloudFront → WAF → ALB security group → app security group → DB security group, plus NACLs, IAM and encryption. -->
+Each layer protects the application even if the layer before it fails or is misconfigured. From the edge inward:
+
+1. **CloudFront:** the only public entry point. Serves HTTPS only and hides the ALB from users.
+2. **AWS WAF:** blocks common web attacks (OWASP Top 10) and limits how many requests one IP address can send.
+3. **ALB security group and listener rule:** accept traffic only from CloudFront, and only with the secret custom header.
+4. **Private subnets:** the instances and the database have no public IP addresses and cannot be reached from the internet.
+5. **App and database security groups:** each tier accepts traffic only from the tier in front of it.
+6. **Network ACLs:** a second, subnet-level filter in case a security group is misconfigured.
+7. **IAM and Session Manager:** no SSH keys or open admin ports; instances get only the permissions they need.
+8. **Encryption:** data is encrypted in transit (TLS) and at rest (KMS).
 
 ### Security group chain
 
-| Security group | Inbound rule | Source |
-| --- | --- | --- |
-| alb-sg | TBD | TBD |
-| app-sg | TBD | alb-sg |
-| db-sg | TBD | app-sg |
+| Security group | Attached to | Inbound | Source | Outbound |
+| --- | --- | --- | --- | --- |
+| alb-sg | ALB | HTTPS 443 | CloudFront managed prefix list (`com.amazonaws.global.cloudfront.origin-facing`) | TCP 3000 to app-sg |
+| app-sg | EC2 instances | TCP 3000 | alb-sg | PostgreSQL 5432 to db-sg; HTTPS 443 to the internet through NAT (updates, Session Manager) |
+| db-sg | RDS | PostgreSQL 5432 | app-sg | None |
+
+Rules use security group IDs as sources instead of IP ranges. Instances in the Auto Scaling group are created and replaced all the time, so their IP addresses change. A rule that references a security group follows its members automatically, so a new instance can reach the database as soon as it starts, and nothing else can.
+
+There is no inbound rule for SSH (port 22) on any group. Administrators use Session Manager instead (see [Instance access and permissions](#instance-access-and-permissions)).
+
+Security groups are stateful: return traffic for an allowed connection is allowed automatically. This is why db-sg needs no outbound rule.
 
 ### Network ACLs
 
-<!-- Which subnets, which rules, and why NACLs are stateless. -->
+Security groups are the main filter. Network ACLs add a second, subnet-level layer around the most sensitive tier, the database.
+
+- Public and app subnets use the default network ACL, which allows all traffic. Their protection comes from the security group chain.
+- Data subnets use a custom network ACL (`data-nacl`):
+
+| Direction | Rule # | Protocol / ports | Source / destination | Action |
+| --- | --- | --- | --- | --- |
+| Inbound | 100 | TCP 5432 | 10.0.11.0/24 (app-a) | Allow |
+| Inbound | 110 | TCP 5432 | 10.0.12.0/24 (app-b) | Allow |
+| Inbound | 120 | All | 10.0.21.0/24 (data-a) | Allow |
+| Inbound | 130 | All | 10.0.22.0/24 (data-b) | Allow |
+| Inbound | * | All | 0.0.0.0/0 | Deny |
+| Outbound | 100 | TCP 1024–65535 | 10.0.11.0/24 (app-a) | Allow |
+| Outbound | 110 | TCP 1024–65535 | 10.0.12.0/24 (app-b) | Allow |
+| Outbound | 120 | All | 10.0.21.0/24 (data-a) | Allow |
+| Outbound | 130 | All | 10.0.22.0/24 (data-b) | Allow |
+| Outbound | * | All | 0.0.0.0/0 | Deny |
+
+Network ACLs are stateless: return traffic is not allowed automatically. When an instance connects to the database on port 5432, the reply goes back to a random ephemeral port on the instance (1024–65535), so the outbound rules must allow that range. Rules 120 and 130 keep traffic between the two data subnets open for the RDS primary and standby. If a security group rule is ever opened by mistake, this ACL still blocks any traffic to the database that does not come from the app subnets.
 
 ### AWS WAF rules
 
-<!-- Managed rule groups (OWASP Top 10), rate-based rule, web ACL attached to the ALB. -->
+
+A web ACL is attached to the ALB. Rules are evaluated in priority order:
+
+| Priority | Rule | Type | What it blocks |
+| --- | --- | --- | --- |
+| 1 | `AWSManagedRulesCommonRuleSet` | AWS managed | Common OWASP Top 10 attacks, such as cross-site scripting and bad request formats |
+| 2 | `AWSManagedRulesKnownBadInputsRuleSet` | AWS managed | Request patterns known to exploit vulnerabilities |
+| 3 | `AWSManagedRulesSQLiRuleSet` | AWS managed | SQL injection in query strings, body and cookies |
+| 4 | `rate-limit-per-ip` | Rate-based | More than 1,000 requests from one IP address in 5 minutes |
+
+AWS maintains the managed rule groups and updates them as new attack patterns appear, so no custom rules need to be written or maintained. The rate-based rule protects against request floods and brute-force attempts. The SQL injection group matters here because the application stores user input in PostgreSQL.
 
 ### Instance access and permissions
 
-<!-- Session Manager instead of SSH or a bastion host. Instance IAM role. IMDSv2. -->
+Administrators connect to the instances with AWS Systems Manager Session Manager instead of SSH or a bastion host. No inbound ports are open, no SSH keys are needed, and every session is logged.
+
+Each instance has an IAM role with only the permissions it needs:
+
+| Permission | Why |
+| --- | --- |
+| `AmazonSSMManagedInstanceCore` | Allows Session Manager access |
+| Read access to `/notes-app/*` in Parameter Store | Reads the database password at startup |
+
+The database password is stored encrypted in Systems Manager Parameter Store, not in the code. The launch template requires IMDSv2, which protects the role credentials on the instance.
 
 ### Encryption
 
-<!-- In transit (TLS at CloudFront, ALB and RDS) and at rest (RDS, EBS with KMS). -->
+In transit (data moving over the network is encrypted with TLS):
+
+- User to CloudFront (arrow 2): HTTPS only. If a user opens the site with `http://`, CloudFront redirects to `https://`.
+- CloudFront to ALB (arrow 3): HTTPS.
+- ALB to EC2 (arrow 4): HTTP inside the VPC. This traffic never leaves the private network.
+- Application to RDS (arrow 5): the PostgreSQL connection uses TLS.
+- Certificates come from AWS Certificate Manager (ACM). The CloudFront certificate is created in us-east-1, as CloudFront requires; the ALB certificate is created in eu-central-1.
+
+At rest (stored data is encrypted with AWS KMS):
+
+- RDS storage, automated backups and snapshots.
+- EBS volumes on the instances.
+- The database password in Parameter Store.
 
 ## High availability and failure scenarios
 
